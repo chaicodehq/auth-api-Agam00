@@ -1,19 +1,72 @@
-import bcrypt from 'bcryptjs';
-import { User } from '../models/user.model.js';
-import { signToken } from '../utils/jwt.js';
+import bcrypt from "bcryptjs";
+import { User } from "../models/user.model.js";
+import { signToken } from "../utils/jwt.js";
 
-/**
- * TODO: Register a new user
- *
- * 1. Extract name, email, password from req.body
- * 2. Check if user with email already exists
- *    - If yes: return 409 with { error: { message: "Email already exists" } }
- * 3. Create new user (password will be hashed by pre-save hook)
- * 4. Return 201 with { user } (password excluded by default)
- */
+// /**
+//  * TODO: Register a new user
+//  *
+//  * 1. Extract name, email, password from req.body
+//  * 2. Check if user with email already exists
+//  *    - If yes: return 409 with { error: { message: "Email already exists" } }
+//  * 3. Create new user (password will be hashed by pre-save hook)
+//  * 4. Return 201 with { user } (password excluded by default)
+//  */
 export async function register(req, res, next) {
   try {
-    // Your code here
+    const { name, email, password } = req.body;
+
+    // 🔴 Required fields check
+    if (!name) {
+      return res.status(400).json({
+        error: { message: "Name is required" },
+      });
+    }
+
+    if (!email) {
+      return res.status(400).json({
+        error: { message: "Email is required" },
+      });
+    }
+
+    if (!password) {
+      return res.status(400).json({
+        error: { message: "Password is required" },
+      });
+    }
+
+    // 🔴 Email format check
+    const emailRegex = /^\S+@\S+\.\S+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        error: { message: "Invalid email format" },
+      });
+    }
+
+    // 🔴 Password length check
+    if (password.length < 6) {
+      return res.status(400).json({
+        error: { message: "Password must be at least 6 characters" },
+      });
+    }
+
+    // 🔴 Check existing user
+    const existing = await User.findOne({ email });
+    if (existing) {
+      return res.status(409).json({
+        error: { message: "Email already exists" },
+      });
+    }
+
+    // 🔴 Create user
+    const user = await User.create({
+      name,
+      email,
+      password,
+    });
+
+    user.password = undefined;
+
+    return res.status(201).json({ user });
   } catch (error) {
     next(error);
   }
@@ -32,7 +85,27 @@ export async function register(req, res, next) {
  */
 export async function login(req, res, next) {
   try {
-    // Your code here
+    const { email, password } = req.body;
+
+    // finding the user..
+    const user = await User.findOne({ email }).select("+password");
+
+    const isValid = user && (await bcrypt.compare(password, user.password));
+
+    if (!isValid)
+      return res
+        .status(401)
+        .json({ error: { message: "Invalid credentials" } });
+
+    const token = signToken({
+      userId: user._id,
+      email: user.email,
+      role: user.role,
+    });
+
+    user.password = undefined;
+
+    res.json({ token, user });
   } catch (error) {
     next(error);
   }
@@ -46,7 +119,7 @@ export async function login(req, res, next) {
  */
 export async function me(req, res, next) {
   try {
-    // Your code here
+    res.json({ user: req.user });
   } catch (error) {
     next(error);
   }
